@@ -415,11 +415,11 @@ for poly in CONTINENTS:
 d.polygon([PJ(50,47), PJ(53,44), PJ(50,38), PJ(48,42)], fill=(206, 218, 222))
 def marker(n, lon, lat):
     x, y = PJ(lon, lat)
-    d.ellipse([x - 9, y - 9, x + 9, y + 9], fill=RED, outline=WHITE)
+    d.ellipse([x - 7, y - 7, x + 7, y + 7], fill=RED, outline=WHITE)
     text(x, y - 1, str(n), SANS_B(10), WHITE, anchor="mm")
 markers = [
-    (1, 30.5, 50.4), (2, 84.9, 19.3), (3, 139.62, 35.68), (4, 46.7, 24.7),
-    (5, 30.7, 36.15), (6, -74.0, 40.7), (7, -0.1, 51.5), (8, 106.85, -6.2),
+    (1, 30.5, 50.4), (2, 84.9, 19.3), (3, 138.8, 36.2), (4, 46.7, 24.7),
+    (5, 32.5, 38.2), (6, -74.0, 40.7), (7, -0.1, 51.5), (8, 105.5, -6.0),
 ]
 for n, lon, lat in markers:
     marker(n, lon, lat)
