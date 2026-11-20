@@ -8,7 +8,7 @@ import { join } from "node:path";
 const DEFAULT_OUT = "/output";
 const EDITION = "2026-1120";
 const ITEMS = 18;
-const VERSION = "v4.1";
+const VERSION = "v4.3";
 
 async function main() {
   const outDir = process.env.MAKEFUN_OUTPUT_DIR || DEFAULT_OUT;
