@@ -55,12 +55,13 @@ def tw(t, f): return d.textlength(t, font=f)
 def text(x, y, t, f, fill, anchor="la"):
     d.text((x, y), t, font=f, fill=fill, anchor=anchor)
 
-def vgrad(x0, y0, x1, y1, c0, c1):
+def vgrad(x0, y0, x1, y1, c0, c1, dd=None):
+    dd = d if dd is None else dd  # draw target: default main image, pass sd for scene
     hgt = max(1, y1 - y0)
     for i in range(hgt):
         t = i / hgt
         c = tuple(int(c0[k] + (c1[k] - c0[k]) * t) for k in range(3))
-        d.line([(x0, y0 + i), (x1, y0 + i)], fill=c)
+        dd.line([(x0, y0 + i), (x1, y0 + i)], fill=c)
 
 def panel(x0, y0, x1, y1, fill=WHITE, border=LINE):
     d.rectangle([x0 + 2, y0 + 3, x1 + 2, y1 + 3], fill=(222, 217, 204))
@@ -97,7 +98,7 @@ SCENE_H = 296
 scene = Image.new("RGB", (HXW, SCENE_H), (0, 0, 0))
 sd = ImageDraw.Draw(scene)
 SW, SH = HXW, SCENE_H
-vgrad(0, 0, SW, SH, (13, 19, 30), (38, 56, 80))
+vgrad(0, 0, SW, SH, (13, 19, 30), (38, 56, 80), dd=sd)
 spx = scene.load()
 for yy in range(0, 150):
     for xx in range(0, SW, 4):
@@ -112,7 +113,7 @@ for rad, col in ((26, (210, 205, 188)), (22, (232, 228, 212)), (16, (222, 218, 2
     sd.ellipse([mx - rad, my - rad, mx + rad, my + rad], fill=col)
 sd.ellipse([mx - 8, my - 14, mx + 12, my + 6], fill=(216, 212, 196))
 # distant fire glow near horizon
-vgrad(0, 220, SW, SH, (38, 56, 80), (72, 52, 44))
+vgrad(0, 220, SW, SH, (38, 56, 80), (72, 52, 44), dd=sd)
 sd.rectangle([0, 252, SW, SH], fill=(96, 66, 48))
 sd.rectangle([0, 262, SW, SH], fill=(122, 82, 56))
 # smoke columns
@@ -231,7 +232,7 @@ CX0, CY0, CX1, CY1 = 612, 312, 988, 478
 panel(CX0, CY0, CX1, CY1, fill=(236, 233, 224))
 kicker(CX0 + 12, CY0 + 10, "ASIA  ·  CYCLONE AKVAN MAKES LANDFALL", GREEN)
 d.line([(CX0 + 12, CY0 + 28), (CX1 - 12, CY0 + 28)], fill=LINE)
-Mx0, My0, Mx1, My1 = CX0 + 12, CY0 + 36, CX0 + 210, CY1 - 34
+Mx0, My0, Mx1, My1 = CX0 + 12, CY0 + 36, CX0 + 210, CY1 - 40
 d.rectangle([Mx0, My0, Mx1, My1], fill=(206, 218, 222))
 d.polygon([(Mx0, My0), (Mx0 + 92, My0), (Mx0 + 96, My0 + 22), (Mx0 + 84, My0 + 44),
            (Mx0 + 88, My0 + 70), (Mx0 + 74, My0 + 96), (Mx0 + 60, My1), (Mx0, My1)],
@@ -267,8 +268,8 @@ for fy2, big, small in ((CY0 + 44, "70\u201390 km/h", "peak winds at landfall"),
                         (CY0 + 120, "47 trains", "cancelled across the coast")):
     text(FX, fy2, big, SERIF_B(19), GREEN)
     text(FX, fy2 + 24, small, SANS(10), GRAPH)
-d.line([(CX0 + 12, CY1 - 22), (CX1 - 12, CY1 - 22)], fill=LINE)
-text(CX0 + 12, CY1 - 18, "Sources: PTI · The Hindu  ·  Landfall Friday morning", SANS(9.5), GRAPH)
+d.line([(CX0 + 12, CY1 - 24), (CX1 - 12, CY1 - 24)], fill=LINE)
+text(CX0 + 12, CY1 - 19, "Sources: PTI · The Hindu", SANS(9), GRAPH)
 
 # ============================================================
 # SECONDARY LEAD 2 — ASIA MARKETS (36..596, 490..652)
@@ -316,14 +317,14 @@ GTX = chx1 + 24
 text(GTX, PY0 + 32, "AND IN ENTERTAINMENT", SANS_B(9.5), GRAPH)
 text(GTX, PY0 + 50, "GTA VI", SERIF_B(24), INK)
 text(GTX, PY0 + 80, "$2.36bn", SERIF_B(26), BRASS)
-text(GTX, PY0 + 110, "revenue in under 24 hours", SANS(10), GRAPH)
-text(GTX, PY0 + 124, "24.5m copies sold \u00b7 75% on PlayStation", SANS(10), GRAPH)
-bar_x, bar_y = GTX, PY0 + 130
-bars = [("GTA VI, day one", 2.36, BRASS), ("Top film, opening weekend", 0.52, BLUEGR)]
+text(GTX, PY0 + 108, "revenue in <24h · 24.5m copies · 75% on PlayStation", SANS(9), GRAPH)
+bar_x, bar_y = GTX, PY0 + 122
+bars = [("GTA VI, day one", 2.36, BRASS), ("Top film, opening wknd", 0.52, BLUEGR)]
 for i, (lab, v, col) in enumerate(bars):
-    yb = bar_y + i * 14
-    text(bar_x, yb, lab, SANS(9), GRAPH)
-    d.rectangle([bar_x, yb + 9, bar_x + int(130 * v / 2.36), yb + 14], fill=col)
+    yb = bar_y + i * 15  # bar + label on one line, rows clear the sources rule
+    blen = int(110 * v / 2.36)
+    d.rectangle([bar_x, yb, bar_x + blen, yb + 7], fill=col)
+    text(bar_x + blen + 6, yb - 1, lab, SANS(8.5), GRAPH)
 text(PX0 + 12, PY1 - 18, "Source: Sensor Tower \u00b7 Rockstar opening-day estimate", SANS(9.5), GRAPH)
 
 # ============================================================
@@ -417,8 +418,8 @@ def marker(n, lon, lat):
     d.ellipse([x - 9, y - 9, x + 9, y + 9], fill=RED, outline=WHITE)
     text(x, y - 1, str(n), SANS_B(10), WHITE, anchor="mm")
 markers = [
-    (1, 30.5, 50.4), (2, 84.9, 19.3), (3, 139.7, 35.7), (4, 46.7, 24.7),
-    (5, 30.7, 36.9), (6, -74.0, 40.7), (7, -0.1, 51.5), (8, 106.9, -6.15),
+    (1, 30.5, 50.4), (2, 84.9, 19.3), (3, 139.62, 35.68), (4, 46.7, 24.7),
+    (5, 30.7, 36.15), (6, -74.0, 40.7), (7, -0.1, 51.5), (8, 106.85, -6.2),
 ]
 for n, lon, lat in markers:
     marker(n, lon, lat)
