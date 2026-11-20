@@ -370,7 +370,7 @@ for lon in range(-160, 200, 20):
 for lat in range(-40, 90, 20):
     _, yg = PJ(0, lat)
     d.line([(MXa0, yg), (MXa1, yg)], fill=(216, 220, 214))
-d.rectangle([MXa0, MYa0, MXa1, MYa1], outline=(180, 186, 178))
+d.rectangle([MXa0, MYa0, MXa1, MYa1], fill=(226, 232, 232), outline=(180, 186, 178))
 _, ye = PJ(0, 0)
 d.line([(MXa0, ye), (MXa1, ye)], fill=(168, 176, 170), width=1)
 LAND   = (210, 208, 192)
