@@ -1,11 +1,14 @@
-// Entrypoint: stage entry.png into the output directory.
+// Entrypoint: stage entry.png + manifest.json into the output directory.
 // Node 22 runs this directly as ESM, no build step needed.
 
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 const DEFAULT_OUT = "/output";
+const EDITION = "2026-1120";
+const ITEMS = 35;
+const REGIONS = 7;
 
 async function main() {
   const outDir = process.env.MAKEFUN_OUTPUT_DIR || DEFAULT_OUT;
@@ -15,7 +18,18 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   copyFileSync(src, join(outDir, "entry.png"));
 
-  console.log(`[entry] entry.png copied -> ${outDir}`);
+  const manifest = {
+    image: "entry.png",
+    dimensions: { width: 1024, height: 1024 },
+    edition: EDITION,
+    items: ITEMS,
+    regions: REGIONS,
+  };
+  writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+
+  const bytes = statSync(src).size;
+  console.log(`[entry] entry.png (${bytes} bytes) + manifest.json -> ${outDir}`);
+  console.log(`[entry] items: ${ITEMS}, regions: ${REGIONS}, edition: ${EDITION}`);
 }
 
 main().catch((err) => {

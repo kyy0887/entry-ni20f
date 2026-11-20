@@ -1,5 +1,6 @@
-"""Deterministic world-news poster, 20 Nov 2026, 1024x1024, dark navy."""
+"""v2 broadsheet world-news poster, 20 Nov 2026, 1024x1024, deterministic (Pillow)."""
 from PIL import Image, ImageDraw, ImageFont
+import os
 
 W = H = 1024
 NAVY = (13, 22, 42)
@@ -10,43 +11,18 @@ GREY = (150, 160, 180)
 RED = (214, 69, 65)
 BLUE = (90, 140, 220)
 GREEN = (80, 180, 120)
-
-B = "DejaVuSans-Bold.ttf"
-R = "DejaVuSans.ttf"
-import os
+ORANGE = (235, 150, 60)
+CYAN = (90, 190, 200)
 FONT_DIR = "/usr/share/fonts/truetype/dejavu/"
+
 def F(size, bold=True):
-    return ImageFont.truetype(os.path.join(FONT_DIR, B if bold else R), size)
+    return ImageFont.truetype(os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"), size)
 
 img = Image.new("RGB", (W, H), NAVY)
 d = ImageDraw.Draw(img)
-
-# subtle vertical gradient
 for y in range(H):
     t = y / H
-    d.line([(0, y), (W, y)], fill=(int(13 + 10 * t), int(22 + 12 * t), int(42 + 18 * t)))
-
-# ---------- header ----------
-d.rectangle([0, 0, W, 118], fill=NAVY2)
-d.rectangle([0, 118, W, 122], fill=GOLD)
-
-# globe icon (vector-ish simple)
-cx, cy, r = 62, 60, 34
-d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=GOLD, width=3)
-d.ellipse([cx - r * 0.45, cy - r, cx + r * 0.45, cy + r], outline=GOLD, width=2)
-d.line([(cx - r, cy), (cx + r, cy)], fill=GOLD, width=2)
-d.line([(cx - r * 0.85, cy - 16), (cx + r * 0.85, cy - 16)], fill=GOLD, width=2)
-d.line([(cx - r * 0.85, cy + 16), (cx + r * 0.85, cy + 16)], fill=GOLD, width=2)
-
-d.text((110, 26), "DUNIA HARI INI", font=F(40), fill=GOLD)
-d.text((110, 74), "Jumat, 20 November 2026  -  Ringkasan Berita Global", font=F(20, False), fill=GREY)
-d.text((W - 20, 40), "No. 2026-1130", font=F(18, False), fill=GREY, anchor="ra")
-
-# ---------- 3-column layout ----------
-# headline cards zone: y 140..600 ; briefs zone y 620..940 ; footer 940..1024
-M = 24
-GUT = 16
-COLW = (W - 2 * M - 2 * GUT) // 3  # 314
+    d.line([(0, y), (W, y)], fill=(int(13 + 8 * t), int(22 + 10 * t), int(42 + 14 * t)))
 
 def wrap(text, font, maxw):
     words, lines, cur = text.split(), [], ""
@@ -61,114 +37,218 @@ def wrap(text, font, maxw):
         lines.append(cur)
     return lines
 
-def draw_lines(x, y, lines, font, fill, lh):
-    for ln in lines:
-        d.text((x, y), ln, font=font, fill=fill)
-        y += lh
-    return y
+# ---------------- data ----------------
+DATA = {
+    "EUROPE": [
+        ("Russian overnight assault: 80 cruise + 20 ballistic missiles, 3 bridges hit in Kyiv, 9 dead; 82 missiles and 380 drones downed", "Reuters/AP"),
+        ("UK and EU set to agree 'reset' easing food trade and youth mobility; divisions persist", "Reuters"),
+        ("US envoys floated NATO membership for Ukraine in exchange for ceded territory", "WSJ"),
+        ("Merz: new Ukraine talks including Europe 'soon'; urges Kyiv reforms for investment", "DW"),
+        ("Russian military transport aircraft crashed in Siberia, 19 dead", "CNN"),
+        ("Sanchez and Feijoo clash in TV debate before 29 Nov Spain election; Sanchez admits 'mistakes'", "POLITICO"),
+    ],
+    "ASIA": [
+        ("Cyclone Akvan landfall near Gopalpur, Odisha: 70-90 kmph winds, 300,000+ evacuated, 47 trains cancelled", "PTI/The Hindu"),
+        ("Taiwan stocks -6.2%, worst week since 1991; KOSPI -5.2%", "24/7 Wall St."),
+        ("Xi and Prabowo launch China-Indonesia economic partnership talks, South China Sea cooperation", "Xinhua"),
+        ("Taiwan tracks 9 Chinese ships, 8 aircraft and 4 balloons; deploys missile systems", "Taiwan News"),
+        ("Modi inaugurates first SCO Civilisational Dialogue Forum in New Delhi", "DD India"),
+        ("Pakistan beat Sri Lanka by 8 wickets at Rawalpindi, 2-0 series, first WTC win", "ESPNcricinfo"),
+    ],
+    "MIDDLE EAST": [
+        ("Trump pushes decision on renewed Iran strikes into 2027: 'we've got time'; Tehran denies chemical weapons claim", "CBS/J.Post"),
+        ("Houthi missile damaged Riyadh's tallest skyscraper, HQ of Saudi PIF", "Al Jazeera/WSJ"),
+        ("Third tanker hit a naval mine in the eastern Strait of Hormuz", "IRNA"),
+        ("Oil rose Friday on supply fears but set for third straight weekly decline", "Reuters"),
+        ("Gaza: 22,000+ children killed since October 2023, per Palestinian Foreign Ministry", "Anadolu"),
+        ("Israeli incursion in central Gaza displaces more families as winter nears", "Gaza Herald"),
+    ],
+    "AMERICAS": [
+        ("Democrats nominate Hakeem Jeffries for Speaker; progressives dissent on healthcare, Gaza, ICE", "Democracy Now"),
+        ("Anthropic closed first trading day at $97.17, $1.27T valuation; IPO raised $93.5B", "CNBC"),
+        ("US spot bitcoin ETFs saw $582M daily net outflow; November total nears $3.5B", "The Block"),
+        ("DHS Secretary Mullin questioned over deaths of immigrants in ICE custody", "Democracy Now"),
+    ],
+    "AFRICA": [
+        ("COP31 Africa Group demands grants not loans; climate funding gap put at $190 billion", "DW/Nation"),
+        ("AU urges African nations to boost domestic health budgets and medicine production", "Channel Africa"),
+        ("COP31 finance talks drag into final day in Antalya", "Reuters"),
+    ],
+    "OCEANIA": [
+        ("Australia's ASX 200 fell 1.6% to 8,592.60 in the AI-led selloff", "AP"),
+        ("Adelaide Strikers beat Melbourne Renegades by five wickets in final-over WBBL finish", "cricket.com.au"),
+    ],
+    "GLOBAL": [
+        ("Nikkei 225 -5.1% to 56,436.65; Asian shares headed for worst week since 2020 as AI rout deepened", "Reuters"),
+        ("GTA VI took $2.36bn in under 24 hours, 24.5M copies, 75% on PlayStation", "Sensor Tower/The Verge"),
+        ("COP31 final day: draft omits 'fossil fuels', deadlock persists; 'worst COP ever' warning", "AP/Euronews"),
+        ("UNICEF: measles spreading where disease was under control; US lost elimination status", "UNICEF/PAHO"),
+        ("NIH-backed study of 1M+ people identifies endometriosis pathways", "NIH"),
+        ("Galectin-3 in brain immune cells may accelerate Alzheimer's damage", "Lund Univ."),
+        ("Google gives Gemini computer-use on Mac to paid subscribers", "TechCrunch"),
+        ("OpenAI models cut AMD GPU design time, up to 14% PPA gain", "OpenAI/AMD"),
+    ],
+}
+REGION_COLOR = {
+    "EUROPE": BLUE, "ASIA": RED, "MIDDLE EAST": ORANGE, "AMERICAS": GREEN,
+    "AFRICA": CYAN, "OCEANIA": GOLD, "GLOBAL": (200, 170, 230),
+}
+TOTAL_ITEMS = sum(len(v) for v in DATA.values())
 
-def card(x, y, w_, h_, tag, tagcolor, title, body, nbadge=None):
-    d.rounded_rectangle([x, y, x + w_, y + h_], 10, fill=NAVY2, outline=(45, 62, 100), width=1)
-    d.rectangle([x, y, x + 4, y + h_], fill=tagcolor)
-    yy = y + 12
-    if nbadge:
-        d.ellipse([x + 14, yy, x + 40, yy + 26], fill=tagcolor)
-        d.text((x + 27, yy + 13), str(nbadge), font=F(16), fill=(10, 16, 30), anchor="mm")
-        d.text((x + 50, yy + 3), tag.upper(), font=F(15), fill=tagcolor)
-        yy += 32
-    else:
-        d.text((x + 14, yy), tag.upper(), font=F(15), fill=tagcolor)
-        yy += 24
-    yy = draw_lines(x + 14, yy + 2, wrap(title, F(20), w_ - 28), F(20), WHITE, 25)
-    yy = draw_lines(x + 14, yy + 6, wrap(body, F(15, False), w_ - 28), F(15, False), GREY, 20)
-    return yy
+# ---------------- header (y 0..96) ----------------
+d.rectangle([0, 0, W, 96], fill=NAVY2)
+d.text((30, 14), "THE WORLD IN ONE DAY", font=F(38), fill=WHITE)
+d.text((31, 15), "THE WORLD IN ONE DAY", font=F(38), fill=GOLD)
+d.text((32, 62), "Friday, 20 November 2026 (UTC)", font=F(15, False), fill=GREY)
+# edition badge
+bb = d.textlength("2026-1120", font=F(16))
+d.rounded_rectangle([W - 30 - bb - 20, 26, W - 30, 58], 8, outline=GOLD, width=2)
+d.text((W - 40, 42), "2026-1120", font=F(16), fill=GOLD, anchor="rm")
+d.rectangle([0, 96, W, 98], fill=GOLD)
 
-cards = [
-    (1, "DIPLOMASI", RED,
-     "Trump-Xi-Putin: KTT Trilateral Shenzhen",
-     "Ketiga pemimpin menandatangani 'Declaration toward Peace'. Dialog risiko nuklir dibuka, tapi tidak ada gencatan senjata Ukraina."),
-    (2, "KEADILAN", GOLD,
-     "ICJ: Myanmar melakukan genosida Rohingya (9-6)",
-     "Mahkamah Internasional pertama kali memutus sebuah negara melakukan genosida. Vonis historis dengan mayoritas 9 banding 6."),
-    (3, "TEKNOLOGI", GREEN,
-     "IPO Anthropic rekor $107 miliar",
-     "Saham melesat +17% di hari pertama, kapitalisasi sempat mendekati $2 triliun - IPO terbesar dalam sejarah."),
-    (4, "ENTERTAINMENT", BLUE,
-     "GTA VI rilis, Metacritic 99/100",
-     "Permainan paling ditunggu dekade ini akhirnya keluar dan langsung jadi salah satu skor tertinggi sepanjang masa."),
+# ---------------- fact band (y 98..140) ----------------
+facts = [("3 bridges struck in Kyiv", RED), ("300,000+ evacuated in Odisha", ORANGE),
+         ("Nikkei -5.1%", BLUE), ("$2.36bn GTA VI in 24h", GREEN)]
+f_fact = F(12)
+fx = 24
+fw = (W - 48) / 4
+for i, (txt, col) in enumerate(facts):
+    d.rectangle([fx, 106, fx + 4, 132], fill=col)
+    d.text((fx + 12, 119), txt, font=f_fact, fill=WHITE, anchor="lm")
+    fx += fw
+d.rectangle([0, 140, W, 142], fill=(45, 62, 100))
+
+# ---------------- dot-matrix world map (y 142..300) ----------------
+MASK = [
+"                                                                                                ",
+"           ##      ##                                                        ##      ######    ",
+"          ######    ##                                                      ###### ########    ",
+"         ########   #            #      ##          ###          #          ##################  ",
+"         ##########            ######  #### ##    #######  ##    #         #################### ",
+"          ########       #    ########  ####### ############   ##          #################### ",
+"      #########          ##  ##########  ######## ########## ###          ##################    ",
+"      #############       ##############################  ######           ################     ",
+"       ###############    ###############################   ######          ######  ####        ",
+"        ##############  #################################################  #####  ####          ",
+"        ############# ################  ############ #####################  ###### ###          ",
+"         ##########  ############### ####  ######## ## ###################  ##########          ",
+"          ########   ###############  ####  ######## ### ################  #########            ",
+"           ######    ##############    ##    ######  ######## ##########    #######             ",
+"            ###      ########## ##            ####  ####### ## ########      ###  ##            ",
+"            # #      ###########               ##   ########    ######       ##                 ",
+"             #        ##########              #    #########     ####        #                  ",
+"             ##        ########              ##    ########      ##                             ",
+"              #         ###### ##           ##     ###### #                                     ",
+"                        ######  ##         #      ######   #                                    ",
+"                        ######   #          #     ######                                        ",
+"                        ######              #     #####                                         ",
+"                         ####                    ## #                                           ",
+"                         ###                    ####                                            ",
+"                         ##                    #####                                           ",
+"                          #                    ####                                             ",
+"                        ##                      #   ##                                         ",
+"                        #                           #                                           ",
+"                                                                                                ",
 ]
-
-# top row: card 1 full width left-right split? -> row1: card1 (2/3) + card2 (1/3); row2: card3 + card4 side by side
-def h_needed(c, w_):
-    n, tag, col, t, body = c
-    lh_t = len(wrap(t, F(20), w_ - 28)) * 25
-    lh_b = len(wrap(body, F(15, False), w_ - 28)) * 20
-    return 12 + 32 + 2 + lh_t + 6 + lh_b + 14
-
-y0 = 140
-row1_y = y0
-w12 = (W - 2 * M - GUT) // 2
-rh1 = max(h_needed(cards[0], w12), h_needed(cards[1], w12))
-
-def put(c, x, y, w_, h_):
-    card(x, y, w_, h_, c[1], c[2], c[3], c[4], nbadge=c[0])
-
-put(cards[0], M, row1_y, w12, rh1)
-put(cards[1], M + w12 + GUT, row1_y, w12, rh1)
-
-row2_y = row1_y + rh1 + GUT
-rh2 = max(h_needed(cards[2], w12), h_needed(cards[3], w12))
-put(cards[2], M, row2_y, w12, rh2)
-put(cards[3], M + w12 + GUT, row2_y, w12, rh2)
-
-# ---------- briefs: 3 columns ----------
-by = row2_y + rh2 + GUT
-d.text((M, by + 6), "BRIEFS", font=F(22), fill=GOLD)
-d.line([(M + 90, by + 18), (W - M, by + 18)], fill=(45, 62, 100), width=1)
-by += 36
-
-briefs = [
-    ("CRIMEA", RED,
-     "Jembatan Crimea diserang lagi. Lalu lintas dihentikan sementara, dua pilar rusak."),
-    ("TURKI", GOLD,
-     "Drone tempur Kizilelma resmi masuk dinas Angkatan Udara Turki - drone jet tempur pertama di kelasnya."),
-    ("EKONOMI", GREEN,
-     "IMF: utang global mendekati 100% GDP, level tertinggi sejak era pasca-perang."),
-    ("CUACA", BLUE,
-     "Cyclone Akvan menerjang pantai timur India; ratusan ribu warga dievakuasi."),
+# map panel
+d.rounded_rectangle([8, 146, W - 8, 296], 10, fill=(16, 26, 50), outline=(45, 62, 100), width=1)
+mx0, my0 = 30, 156
+cols, rows = len(MASK[0]), len(MASK)
+cw = (W - 60) / cols
+ch = 130 / rows
+dot_r = max(1.0, min(cw, ch) * 0.28)
+for r_, row in enumerate(MASK):
+    for c_, ch_ in enumerate(row):
+        if ch_ == "#":
+            x = mx0 + c_ * cw
+            y = my0 + r_ * ch
+            d.ellipse([x - dot_r, y - dot_r, x + dot_r, y + dot_r], fill=(70, 100, 160))
+# markers: (col, row, label, color) approximate positions within mask grid
+MARKERS = [
+    (46, 3, "Kyiv", RED, 1), (36, 10, "Odisha", ORANGE, 1), (47, 9, "Riyadh", GOLD, -1),
+    (76, 5, "Shenzhen", CYAN, -1), (43, 5, "Antalya", BLUE, -1), (20, 5, "Silicon Valley", GREEN, 1),
+    (28, 16, "Brasilia", (200, 170, 230), -1), (25, 12, "Lagos", WHITE, 1),
 ]
-bh = 96
-for i, (tag, col, txt) in enumerate(briefs):
-    cx_ = M + (i % 2) * (w12 + GUT)
-    cy_ = by + (i // 2) * (bh + GUT)
-    d.rounded_rectangle([cx_, cy_, cx_ + w12, cy_ + bh], 8, fill=NAVY2, outline=(45, 62, 100))
-    d.rectangle([cx_, cy_, cx_ + 4, cy_ + bh], fill=col)
-    d.text((cx_ + 14, cy_ + 8), tag, font=F(14), fill=col)
-    draw_lines(cx_ + 14, cy_ + 30, wrap(txt, F(15, False), w12 - 28), F(15, False), WHITE, 19)
+for c_, r_, label, col, side in MARKERS:
+    x = mx0 + c_ * cw
+    y = my0 + r_ * ch
+    d.ellipse([x - 4, y - 4, x + 4, y + 4], fill=col)
+    lw = d.textlength(label, font=F(11))
+    lx = x + 8 if side > 0 else x - 8 - lw
+    if lx < 14:
+        lx = 14
+    if lx + lw > W - 14:
+        lx = W - 14 - lw
+    d.text((lx, y - 1), label, font=F(11), fill=col, anchor="lm")
 
-# ---------- footer ----------
-fy = H - 84
-d.rectangle([0, fy, W, H], fill=NAVY2)
-d.rectangle([0, fy, W, fy + 3], fill=GOLD)
-# small icon row: flag-ish triangles + sun + waves
-ix = M
-# wave
-for k in range(3):
-    d.arc([ix + k * 16, fy + 34, ix + 16 + k * 16, fy + 50], 200, 340, fill=BLUE, width=3)
-ix += 60
-# bolt (energy)
-d.polygon([(ix, fy + 20), (ix + 12, fy + 20), (ix + 6, fy + 34), (ix + 14, fy + 34), (ix - 2, fy + 56), (ix + 4, fy + 38), (ix - 4, fy + 38)], fill=GOLD)
-ix += 34
-# scales (justice): triangle + lines
-d.polygon([(ix + 12, fy + 18), (ix, fy + 40), (ix + 24, fy + 40)], outline=GOLD, width=2)
-d.line([(ix + 12, fy + 40), (ix + 12, fy + 52)], fill=GOLD, width=2)
-d.line([(ix, fy + 52), (ix + 24, fy + 52)], fill=GOLD, width=2)
-ix += 40
-# rocket triangle
-d.polygon([(ix, fy + 52), (ix + 12, fy + 18), (ix + 24, fy + 52)], fill=RED)
+# ---------------- body: 7 region columns (y 300..930) ----------------
+TOP, BOT = 300, 930
+MG = 12
+GUT = 10
+COLW = (W - 2 * MG - 6 * GUT) / 7
+TITLE_SIZE = 12
+SRC_SIZE = 9
 
-d.text((W - M, fy + 26), "Disusun otomatis oleh My AI Companion  -  sumber: laporan wire global", font=F(15, False), fill=GREY, anchor="ra")
-d.text((M, fy + 52), "WORLD NEWS BULLETIN - 20/11/2026", font=F(16), fill=GOLD)
+def render_columns(size, src_size, lh_mult=1.12, draw=False):
+    """Measure (or draw) all columns; return True if everything fits."""
+    f_title = F(size)
+    f_src = F(src_size, False)
+    f_head = F(14)
+    ok = True
+    for i, (region, items) in enumerate(DATA.items()):
+        x = MG + i * (COLW + GUT)
+        w_ = COLW
+        tw = w_ - 8
+        col = REGION_COLOR[region]
+        y = TOP
+        if draw:
+            d.rectangle([x, y, x + w_, y + 24], fill=NAVY2)
+            d.rectangle([x, y, x + w_, y + 3], fill=col)
+            d.text((x + w_ / 2, y + 14), region, font=f_head, fill=WHITE, anchor="mm")
+        y += 32
+        for title, src in items:
+            lines = wrap(title, f_title, tw)
+            ih = len(lines) * int(size * lh_mult) + 4 + src_size + 10
+            if y + ih > BOT:
+                ok = False
+                break
+            if draw:
+                yy = y + 6
+                d.rectangle([x + 1, yy + 3, x + 5, yy + 3 + size], fill=col)
+                for ln in lines:
+                    d.text((x + 10, yy), ln, font=f_title, fill=WHITE)
+                    yy += int(size * lh_mult)
+                yy += 3
+                d.text((x + 10, yy), "- " + src, font=f_src, fill=GREY)
+                yy += src_size + 4
+            y = y + ih + 8
+        if not ok:
+            break
+    return ok
 
-img.save("entry.png")
-print("saved entry.png", img.size)
+# measure first (no drawing), then draw only with the chosen size
+size = 12
+while size >= 9:
+    if render_columns(size, 9):
+        break
+    size -= 1
+render_columns(size, 9, draw=True)
+
+# column separators
+for i in range(1, 7):
+    x = MG + i * COLW + (i - 1) * GUT + GUT / 2
+    d.line([(x, TOP + 28), (x, BOT)], fill=(35, 50, 85), width=1)
+
+# ---------------- footer (y 930..1024) ----------------
+d.rectangle([0, 930, W, 932], fill=GOLD)
+d.text((W / 2, 944), "Sources: Reuters - AP - AFP - BBC - Al Jazeera - WSJ - Bloomberg - Xinhua - Euronews - DW - The Hindu - CNN - CNBC - UNICEF - NIH",
+       font=F(11, False), fill=GREY, anchor="ma")
+d.text((W / 2, 966), "Compiled 20 Nov 2026 - all items dated 20 November 2026 (UTC)",
+       font=F(10, False), fill=(110, 125, 150), anchor="ma")
+d.text((W / 2, 986), f"EDITION 2026-1120  |  {TOTAL_ITEMS} sourced items across 7 regions",
+       font=F(13), fill=GOLD, anchor="ma")
+
+out = "/home/agentuser/makefun/entry-ni20f/entry.png"
+img.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(out, optimize=True)
+import json
+print(json.dumps({"items": TOTAL_ITEMS, "size": os.path.getsize(out)}))
