@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 const DEFAULT_OUT = "/output";
 const EDITION = "2026-1120";
-const ITEMS = 35;
+const ITEMS = 32;
 const REGIONS = 7;
 
 async function main() {
