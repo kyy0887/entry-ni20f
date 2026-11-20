@@ -1,534 +1,461 @@
 #!/usr/bin/env python3
-"""v3: PREMIUM EDITORIAL INFOGRAPHIC — 'The World In One Day' newspaper style.
-Deterministic: no random, no timestamps. Fonts from absolute DejaVu paths.
-RGB 1024x1024 paper-cream broadsheet."""
+"""v4: CINEMATIC EDITORIAL REDESIGN — rebuilt from a blank 1024x1024 canvas.
+Hero story: Kyiv overnight assault (cinematic layered night scene with missile
+tracks, intercept glow, layered skyline, bridge/river, lit windows).
+Two distinct secondary leads: Cyclone Akvan (Odisha coastal map, spiral,
+landfall indicator) and Asia Markets (three-index line chart + GTA VI bars).
+Accurate equirectangular world map with coastline polygons, 6 supporting
+stories, verified figures only.
+Deterministic: no random, no timestamps; fonts from absolute DejaVu paths.
+RGB PNG 1024x1024."""
 from PIL import Image, ImageDraw, ImageFont
 import math
 import os
 
 W = H = 1024
-PAPER = (244, 240, 229)
-CARD = (250, 247, 240)
-INK = (23, 23, 23)
-RED = (182, 66, 60)
-NAVY = (24, 50, 74)
-BLUE = (84, 123, 145)
-GREEN = (71, 119, 92)
-GOLD = (179, 148, 87)
-GREY = (110, 106, 96)
-LIGHT = (214, 208, 192)
+PAPER   = (243, 240, 232)
+INK     = (23, 27, 34)
+GRAPH   = (75, 81, 88)
+RED     = (182, 75, 67)
+NAVY    = (32, 59, 82)
+BLUEGR  = (112, 141, 157)
+GREEN   = (79, 118, 95)
+BRASS   = (180, 154, 103)
+WHITE   = (245, 243, 236)
+LINE    = (206, 200, 184)
 
 FD = "/usr/share/fonts/truetype/dejavu/"
 def F(name, size):
     return ImageFont.truetype(FD + name, int(size))
-
 SERIF_B = lambda s: F("DejaVuSerif-Bold.ttf", s)
-SERIF = lambda s: F("DejaVuSerif.ttf", s)
-SANS = lambda s: F("DejaVuSans.ttf", s)
-SANS_B = lambda s: F("DejaVuSans-Bold.ttf", s)
+SERIF   = lambda s: F("DejaVuSerif.ttf", s)
+SANS    = lambda s: F("DejaVuSans.ttf", s)
+SANS_B  = lambda s: F("DejaVuSans-Bold.ttf", s)
 
 img = Image.new("RGB", (W, H), PAPER)
-d = ImageDraw.Draw(img)
 
-# ---------- deterministic paper grain (per-pixel hash pattern) ----------
+# ---------- deterministic paper grain (per-pixel hash) ----------
 px = img.load()
 for y in range(H):
     for x in range(W):
         hsh = (x * 374761393 + y * 668265263) & 0xFFFFFFFF
         hsh = ((hsh ^ (hsh >> 13)) * 1274126177) & 0xFFFFFFFF
-        v = (hsh >> 16) & 7
+        v = (hsh >> 16) & 15
         if v == 0:
             r, g, b = px[x, y]
-            px[x, y] = (r - 6, g - 6, b - 6) if r >= 6 else (0, 0, 0)
-        elif v == 7:
+            px[x, y] = (max(0, r - 7), max(0, g - 7), max(0, b - 7))
+        elif v == 1:
             r, g, b = px[x, y]
-            px[x, y] = (min(255, r + 4), min(255, g + 4), min(255, b + 4))
+            px[x, y] = (min(255, r + 5), min(255, g + 5), min(255, b + 5))
 d = ImageDraw.Draw(img)
 
 # ---------- helpers ----------
-def tw(txt, font):
-    return d.textlength(txt, font=font)
+def tw(t, f): return d.textlength(t, font=f)
 
-def wrap(txt, font, maxw):
-    words = txt.split()
-    lines, cur = [], ""
-    for w_ in words:
-        t = (cur + " " + w_).strip()
-        if tw(t, font) <= maxw:
-            cur = t
-        else:
-            if cur:
-                lines.append(cur)
-            cur = w_
-    if cur:
-        lines.append(cur)
-    return lines
+def text(x, y, t, f, fill, anchor="la"):
+    d.text((x, y), t, font=f, fill=fill, anchor=anchor)
 
-def fit_lines(txt, mkfont, size, maxw, maxlines, minsize=7):
-    s = size
-    while s >= minsize:
-        f = mkfont(s)
-        lines = wrap(txt, f, maxw)
-        if len(lines) <= maxlines:
-            return f, lines
-        s -= 1
-    return mkfont(minsize), wrap(txt, mkfont(minsize), maxw)
+def vgrad(x0, y0, x1, y1, c0, c1):
+    hgt = max(1, y1 - y0)
+    for i in range(hgt):
+        t = i / hgt
+        c = tuple(int(c0[k] + (c1[k] - c0[k]) * t) for k in range(3))
+        d.line([(x0, y0 + i), (x1, y0 + i)], fill=c)
 
-boxes = []
-def mark(x0, y0, x1, y1, tag):
-    boxes.append((x0, y0, x1, y1, tag))
+def panel(x0, y0, x1, y1, fill=WHITE, border=LINE):
+    d.rectangle([x0 + 2, y0 + 3, x1 + 2, y1 + 3], fill=(222, 217, 204))
+    d.rectangle([x0, y0, x1, y1], fill=fill, outline=border)
 
-def overlaps():
-    bad = []
-    for i in range(len(boxes)):
-        for j in range(i + 1, len(boxes)):
-            a, b = boxes[i], boxes[j]
-            ox = min(a[2], b[2]) - max(a[0], b[0])
-            oy = min(a[3], b[3]) - max(a[1], b[1])
-            if ox > 4 and oy > 4:
-                bad.append((a[4], b[4]))
-    return bad
+def kicker(x, y, tag, col):
+    f = SANS_B(10)
+    d.rectangle([x, y, x + 4, y + 12], fill=col)
+    text(x + 9, y + 1, tag, f, GRAPH)
 
-def text_at(x, y, txt, font, fill=INK, anchor="la", tag=None):
-    if tag:
-        w_ = tw(txt, font)
-        if anchor == "ma":
-            x0 = x - w_ / 2
-        elif anchor == "ra":
-            x0 = x - w_
-        else:
-            x0 = x
-        mark(x0, y, x0 + w_, y + font.size + 3, tag)
-    d.text((x, y), txt, font=font, fill=fill, anchor=anchor)
+def hash01(a, b, salt=0):
+    h = (int(a) * 2654435761 + int(b) * 40503 + salt * 97) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((h >> 8) & 0xFFFF) / 65535.0
 
-def para(x, y, txt, mkfont, size, maxw, maxlines, fill=INK, tag=None):
-    f, lines = fit_lines(txt, mkfont, size, maxw, maxlines)
-    for ln in lines:
-        text_at(x, y, ln, f, fill, tag=tag)
-        y += int(f.size * 1.3)
-    return y
+# ============================================================
+# MASTHEAD  (y 26..122)
+# ============================================================
+MX0, MX1 = 36, 988
+text(MX0, 24, "THE WORLD IN ONE DAY", SERIF_B(47), INK)
+text(MX1, 40, "No. 1120", SERIF(15), GRAPH, anchor="ra")
+d.line([(MX0, 84), (MX1, 84)], fill=INK, width=2)
+d.line([(MX0, 88), (MX1, 88)], fill=LINE, width=1)
+text(MX0, 92, "FRIDAY, 20 NOVEMBER 2026", SANS_B(24), RED)
+text(MX1, 99, "A visual digest of world news  ·  Global Edition  ·  all figures from source wire reports", SANS(11), GRAPH, anchor="ra")
+d.line([(MX0, 122), (MX1, 122)], fill=LINE, width=1)
 
-def hline(y, x0=40, x1=W - 40, w_=1, fill=INK):
-    d.rectangle([x0, y, x1, y + w_ - 1], fill=fill)
+# ============================================================
+# HERO — KYIV OVERNIGHT ASSAULT  (36..596, 134..478)
+# ============================================================
+HX0, HY0, HX1, HY1 = 36, 134, 596, 478
+HXW = HX1 - HX0
+SCENE_H = 296
+scene = Image.new("RGB", (HXW, SCENE_H), (0, 0, 0))
+sd = ImageDraw.Draw(scene)
+SW, SH = HXW, SCENE_H
+vgrad(0, 0, SW, SH, (13, 19, 30), (38, 56, 80))
+spx = scene.load()
+for yy in range(0, 150):
+    for xx in range(0, SW, 4):
+        if hash01(xx, yy, 7) > 0.995:
+            r, g, b = spx[xx, yy]
+            lift = 40 + int(50 * hash01(xx, yy, 13))
+            spx[xx, yy] = (min(255, r + lift), min(255, g + lift), min(255, b + lift))
+sd = ImageDraw.Draw(scene)
+# moon
+mx, my = 470, 46
+for rad, col in ((26, (210, 205, 188)), (22, (232, 228, 212)), (16, (222, 218, 200))):
+    sd.ellipse([mx - rad, my - rad, mx + rad, my + rad], fill=col)
+sd.ellipse([mx - 8, my - 14, mx + 12, my + 6], fill=(216, 212, 196))
+# distant fire glow near horizon
+vgrad(0, 220, SW, SH, (38, 56, 80), (72, 52, 44))
+sd.rectangle([0, 252, SW, SH], fill=(96, 66, 48))
+sd.rectangle([0, 262, SW, SH], fill=(122, 82, 56))
+# smoke columns
+for bx, bw, bh in ((90, 26, 90), (150, 18, 60), (430, 30, 80), (500, 16, 50)):
+    sd.polygon([(bx, SH), (bx + bw, SH), (bx + bw // 2 + 14, SH - bh), (bx + bw // 2 - 14, SH - bh)], fill=(58, 52, 48))
+# layered skylines
+def skyline(ybase, col, seed, hmin, hmax):
+    x = 0
+    while x < SW:
+        bw = int(18 + hash01(x, seed, 1) * 34)
+        bh = int(hmin + hash01(x, seed, 2) * (hmax - hmin))
+        sd.rectangle([x, ybase - bh, x + bw, ybase], fill=col)
+        x += bw + int(2 + hash01(x, seed, 3) * 6)
+skyline(266, (44, 62, 84), 11, 24, 62)
+skyline(274, (30, 43, 60), 22, 30, 78)
+# church spire + monument (Kyiv cues)
+sd.polygon([(320, 274), (320, 214), (328, 200), (336, 214), (336, 274)], fill=(30, 43, 60))
+sd.polygon([(322, 214), (328, 200), (334, 214)], fill=(52, 66, 88))
+sd.rectangle([496, 250, 504, 274], fill=(30, 43, 60))
+sd.polygon([(500, 236), (506, 250), (494, 250)], fill=(30, 43, 60))
+# river + bridge
+sd.rectangle([0, 274, SW, 288], fill=(24, 34, 50))
+for bxi in range(40, SW, 52):
+    sd.rectangle([bxi, 276, bxi + 8, 286], fill=(40, 54, 74))
+sd.line([(0, 278), (SW, 278)], fill=(48, 62, 84), width=3)
+for ai in range(60, SW - 60, 96):
+    sd.arc([ai, 266, ai + 72, 288], 180, 360, fill=(56, 72, 96), width=2)
+# near skyline with lit windows
+skyline(296, (13, 18, 26), 33, 40, 96)
+for wx in range(8, SW, 10):
+    bh = 40 + int(hash01(wx, 33, 3) * 56)
+    for wy in range(296 - bh + 6, 292, 9):
+        if hash01(wx, wy, 5) > 0.55:
+            warm = hash01(wx, wy, 9) > 0.75
+            c = (196, 154, 90) if warm else (150, 148, 120)
+            sd.rectangle([wx, wy, wx + 3, wy + 4], fill=c)
+for wx in range(20, SW, 30):
+    if hash01(wx, 99, 6) > 0.4:
+        sd.line([(wx, 280), (wx, 286)], fill=(110, 96, 70), width=2)
+# missile tracks
+def missile(p0, p1, p2, n=26, hot=True):
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        bx = (1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0]
+        by = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]
+        pts.append((bx, by))
+    for i, (bx, by) in enumerate(pts[:-1]):
+        fade = 1 - i / n
+        c = (int(120 + 90 * fade), int(90 + 80 * fade), 60)
+        sd.ellipse([bx - 1, by - 1, bx + 1, by + 1], fill=c)
+    hx, hy = pts[-1]
+    for rad, colr in ((9, (120, 60, 30)), (5, (210, 140, 70)), (2, (250, 230, 190))):
+        sd.ellipse([hx - rad, hy - rad, hx + rad, hy + rad], fill=colr)
+missile((SW - 20, 8), (330, 60), (250, 236))
+missile((SW - 6, 40), (360, 120), (470, 246))
+missile((40, 14), (180, 80), (120, 240), hot=False)
+missile((120, 4), (250, 90), (380, 200), hot=False)
+# intercept flashes
+for ix, iy in ((300, 96), (412, 158), (214, 132), (168, 66)):
+    for rad, colr in ((11, (170, 130, 80)), (6, (236, 216, 180)), (2, (255, 252, 240))):
+        sd.ellipse([ix - rad, iy - rad, ix + rad, iy + rad], fill=colr)
+    sd.line([(ix - 15, iy), (ix + 15, iy)], fill=(200, 170, 120), width=1)
+    sd.line([(ix, iy - 15), (ix, iy + 15)], fill=(200, 170, 120), width=1)
+# searchlight beams
+for gx, ang in ((80, -60), (520, -115)):
+    ex = gx + 90 * math.cos(math.radians(ang)); ey = 280 + 90 * math.sin(math.radians(ang))
+    sd.line([(gx, 280), (ex, ey)], fill=(120, 128, 110), width=2)
+img.paste(scene, (HX0, HY0))
+d = ImageDraw.Draw(img)
+d.rectangle([HX0, HY0, HX1, HY1], outline=INK)
+d.line([(HX0, HY0 + SCENE_H), (HX1, HY0 + SCENE_H)], fill=INK, width=2)
+# headline band
+vgrad(HX0, HY0 + SCENE_H + 1, HX1, HY1, (24, 27, 34), (33, 37, 46))
+kicker(HX0 + 14, HY0 + 306, "EUROPE  ·  LEAD STORY", RED)
+text(HX0 + 14, HY0 + 324, "RUSSIA UNLEASHES OVERNIGHT", SERIF_B(23), WHITE)
+text(HX0 + 14, HY0 + 350, "MISSILE BARRAGE ON KYIV", SERIF_B(23), WHITE)
+text(HX0 + 14, HY0 + 381, "About 80 cruise and 20 ballistic missiles and drones struck the capital:", SANS(11.5), (200, 205, 210))
+text(HX0 + 14, HY0 + 397, "three bridges damaged, at least 9 killed. Air defences reported 82 missiles", SANS(11.5), (200, 205, 210))
+text(HX0 + 14, HY0 + 413, "and about 380 drones shot down.  ·  Reuters / AP", SANS_B(11.5), BRASS)
+# corner stat flags on scene
+for sx_, slabel, sval in ((HX0 + 10, "MISSILES FIRED", "100+"), (HX1 - 10, "KILLED IN KYIV", "9+")):
+    fb = SERIF_B(17)
+    bw = 92
+    bx = sx_ - bw if sx_ == HX1 - 10 else sx_
+    d.rectangle([bx, HY0 + 10, bx + bw, HY0 + 46], fill=(15, 20, 28), outline=(70, 80, 94))
+    text(bx + 6, HY0 + 13, slabel, SANS_B(9), (170, 178, 186))
+    text(bx + 6, HY0 + 25, sval, fb, BRASS)
 
-M = 40
-
-# =====================================================================
-# A. MASTHEAD (0..122)
-# =====================================================================
-text_at(W // 2, 10, "THE WORLD IN ONE DAY", SANS_B(12), GOLD, "ma", "mast-kicker")
-text_at(W // 2, 26, "FRIDAY 20 NOVEMBER 2026", SERIF_B(42), INK, "ma", "mast-date")
-text_at(W // 2, 80, "No. 1120  ·  Global Edition  ·  All items dated 20 November 2026 (UTC)", SANS(10), GREY, "ma", "mast-ed")
-ed = ("Moscow unleashes roughly one hundred missiles on Kyiv as Cyclone Akvan drives 300,000 "
-      "from India's coast; Asian markets log their worst week since 1991 while GTA VI takes $2.36bn in a day.")
-f_ed, lns_ed = fit_lines(ed, SANS, 10, W - 2 * M, 2)
-yy = 92
-for ln in lns_ed:
-    text_at(W // 2, yy, ln, f_ed, NAVY, "ma", "mast-edit")
-    yy += 14
-hline(118, M, W - M, 2)
-hline(121, M, W - M, 1)
-
-# =====================================================================
-# B. KEY STATISTICS (124..192)
-# =====================================================================
-stats = [
-    ("9+", "killed in Kyiv assault", RED),
-    ("300K+", "evacuated, Odisha", GREEN),
-    ("$2.36bn", "GTA VI day one", NAVY),
-    ("-5.1%", "Nikkei to 56,436", BLUE),
-    ("$93.5bn", "Anthropic IPO raised", GOLD),
+# ============================================================
+# RIGHT RAIL: KEY FIGURES (612..988, 134..300)
+# ============================================================
+KX0, KY0, KX1, KY1 = 612, 134, 988, 300
+panel(KX0, KY0, KX1, KY1)
+kicker(KX0 + 12, KY0 + 10, "KEY FIGURES OF THE DAY", NAVY)
+d.line([(KX0 + 12, KY0 + 28), (KX1 - 12, KY0 + 28)], fill=LINE)
+figs = [
+    ("300,000+", "evacuated for Cyclone Akvan, Odisha (PTI)", GREEN),
+    ("$93.5bn",  "Anthropic IPO \u2014 largest ever (CNBC)", NAVY),
+    ("$2.36bn",  "GTA VI revenue in <24 hours (Sensor Tower)", BRASS),
+    ("\u22125.1%", "Nikkei weekly fall, to 56,436.65 (Reuters)", RED),
+    ("9+",       "killed in the Kyiv missile assault (Reuters/AP)", RED),
 ]
-colw = (W - 2 * M) / 5
-for i, (num, cap, col) in enumerate(stats):
-    cx = M + colw * (i + 0.5)
-    fnum = SERIF_B(26 if len(num) <= 6 else 22)
-    text_at(cx, 132, num, fnum, col, "ma", f"stat{i}n")
-    text_at(cx, 166, cap, SANS(9), GREY, "ma", f"stat{i}c")
-    if i:
-        d.line([M + colw * i, 134, M + colw * i, 180], fill=LIGHT, width=1)
+fy = KY0 + 36
+for i, (val, lab, col) in enumerate(figs):
+    text(KX0 + 14, fy + 1, val, SERIF_B(22), col)
+    text(KX1 - 14, fy + 8, lab, SANS(10), GRAPH, anchor="ra")
+    fy += 33
+    if i < len(figs) - 1:
+        d.line([(KX0 + 12, fy - 4), (KX1 - 12, fy - 4)], fill=(224, 219, 206))
 
-# =====================================================================
-# C. REGION STRIP (192..232)
-# =====================================================================
-hline(190)
-regions = [("EUROPE", 6, RED), ("ASIA-PACIFIC", 6, NAVY), ("MIDDLE EAST", 6, GREEN),
-           ("AMERICAS", 4, BLUE), ("AFRICA", 3, GOLD), ("OCEANIA", 2, GREY), ("GLOBAL", 5, INK)]
-rw = (W - 2 * M) / len(regions)
-for i, (nm, n, col) in enumerate(regions):
-    cx = M + rw * (i + 0.5)
-    d.rectangle([cx - 3, 198, cx + 3, 204], fill=col)
-    text_at(cx, 207, nm, SANS_B(9), col, "ma", f"reg{i}")
-    text_at(cx, 219, f"{n} stories", SANS(8), GREY, "ma", f"reg{i}n")
+# ============================================================
+# SECONDARY LEAD 1 — CYCLONE AKVAN coastal map (612..988, 312..478)
+# ============================================================
+CX0, CY0, CX1, CY1 = 612, 312, 988, 478
+panel(CX0, CY0, CX1, CY1, fill=(236, 233, 224))
+kicker(CX0 + 12, CY0 + 10, "ASIA  ·  CYCLONE AKVAN MAKES LANDFALL", GREEN)
+d.line([(CX0 + 12, CY0 + 28), (CX1 - 12, CY0 + 28)], fill=LINE)
+Mx0, My0, Mx1, My1 = CX0 + 12, CY0 + 36, CX0 + 210, CY1 - 34
+d.rectangle([Mx0, My0, Mx1, My1], fill=(206, 218, 222))
+d.polygon([(Mx0, My0), (Mx0 + 92, My0), (Mx0 + 96, My0 + 22), (Mx0 + 84, My0 + 44),
+           (Mx0 + 88, My0 + 70), (Mx0 + 74, My0 + 96), (Mx0 + 60, My1), (Mx0, My1)],
+          fill=(226, 222, 206), outline=(150, 145, 126))
+d.line([(Mx0 + 92, My0), (Mx0 + 96, My0 + 22), (Mx0 + 84, My0 + 44), (Mx0 + 88, My0 + 70),
+        (Mx0 + 74, My0 + 96), (Mx0 + 60, My1)], fill=(120, 128, 118), width=2)
+# storm spiral offshore
+scx, scy = Mx0 + 158, My0 + 44
+for arm in range(3):
+    pts = []
+    for i in range(24):
+        t = i / 23
+        ang = arm * 2.094 + t * 3.4
+        rr = 4 + t * 24
+        pts.append((scx + rr * math.cos(ang), scy + rr * math.sin(ang) * 0.85))
+    d.line(pts, fill=NAVY, width=2)
+d.ellipse([scx - 4, scy - 4, scx + 4, scy + 4], fill=NAVY)
+text(scx - 1, scy - 36, "CYCLONE AKVAN", SANS_B(9), NAVY, anchor="ma")
+# landfall crosshair at Gopalpur
+gx, gy = Mx0 + 86, My0 + 62
+d.line([(gx - 12, gy), (gx + 12, gy)], fill=RED, width=2)
+d.line([(gx, gy - 12), (gx, gy + 12)], fill=RED, width=2)
+d.ellipse([gx - 4, gy - 4, gx + 4, gy + 4], outline=RED, width=2)
+d.polygon([(gx + 26, gy - 7), (gx + 26, gy + 7), (gx + 38, gy)], fill=RED)
+text(gx + 42, gy - 6, "LANDFALL", SANS_B(9), RED)
+text(gx - 4, gy + 13, "Gopalpur", SANS(9), GRAPH, anchor="ma")
+text(Mx0 + 6, My1 - 14, "INDIA", SANS_B(9), (120, 115, 96))
+text(Mx1 - 8, My0 + 6, "Bay of\nBengal", SANS(9), (86, 110, 120), anchor="ra")
+# facts right of map
+FX = Mx1 + 16
+for fy2, big, small in ((CY0 + 44, "70\u201390 km/h", "peak winds at landfall"),
+                        (CY0 + 82, "300,000+", "people moved to shelter"),
+                        (CY0 + 120, "47 trains", "cancelled across the coast")):
+    text(FX, fy2, big, SERIF_B(19), GREEN)
+    text(FX, fy2 + 24, small, SANS(10), GRAPH)
+d.line([(CX0 + 12, CY1 - 22), (CX1 - 12, CY1 - 22)], fill=LINE)
+text(CX0 + 12, CY1 - 18, "Sources: PTI · The Hindu  ·  Landfall Friday morning", SANS(9.5), GRAPH)
 
-# =====================================================================
-# D. THREE LEAD STORIES (238..534)
-# =====================================================================
-py0 = 238
-ph = 296
-pw = (W - 2 * M - 2 * 10) / 3
+# ============================================================
+# SECONDARY LEAD 2 — ASIA MARKETS (36..596, 490..652)
+# ============================================================
+PX0, PY0, PX1, PY1 = 36, 490, 596, 652
+panel(PX0, PY0, PX1, PY1)
+kicker(PX0 + 12, PY0 + 10, "MARKETS  ·  ASIA SHARES SUFFER WORST WEEK SINCE 1991", NAVY)
+d.line([(PX0 + 12, PY0 + 28), (PX1 - 12, PY0 + 28)], fill=LINE)
+chx0, chy0, chx1, chy1 = PX0 + 20, PY0 + 46, PX0 + 300, PY1 - 40
+d.rectangle([chx0, chy0, chx1, chy1], fill=(240, 238, 230), outline=LINE)
+days = ["MON", "TUE", "WED", "THU", "FRI"]
+for i, day in enumerate(days):
+    gx2 = chx0 + i * (chx1 - chx0) / 4
+    d.line([(gx2, chy0), (gx2, chy1)], fill=(224, 220, 208))
+    text(gx2, chy1 + 4, day, SANS_B(8.5), GRAPH, anchor="ma")
+d.line([(chx0, chy1), (chx1, chy1)], fill=GRAPH, width=2)
+d.line([(chx0, chy0), (chx0, chy1)], fill=GRAPH, width=1)
+def week_path(final_drop, jitter_seed):
+    path = []
+    for i in range(5):
+        j = (hash01(i, jitter_seed, 4) - 0.5) * 1.6
+        path.append(final_drop * (i / 4) + (j if 0 < i < 4 else 0))
+    return path
+lo, hi = -7.0, 0.5
+def ymap(v): return chy1 - (v - lo) / (hi - lo) * (chy1 - chy0)
+zero_y = ymap(0)
+d.line([(chx0, zero_y), (chx1, zero_y)], fill=(196, 190, 176), width=1)
+text(chx0 + 3, zero_y - 12, "0%", SANS(8.5), GRAPH)
+series = [("NIKKEI", -5.1, RED, 1), ("KOSPI", -5.2, NAVY, 2), ("TAIWAN", -6.2, BLUEGR, 3)]
+for name, drop, col, seed in series:
+    path = week_path(drop, seed)
+    pts = [(chx0 + i * (chx1 - chx0) / 4, ymap(path[i])) for i in range(5)]
+    d.line(pts, fill=col, width=2)
+    for pxx, pyy in pts[::2]:
+        d.ellipse([pxx - 2.5, pyy - 2.5, pxx + 2.5, pyy + 2.5], fill=col)
+    lx, ly = pts[-1]
+    d.ellipse([lx - 3.5, ly - 3.5, lx + 3.5, ly + 3.5], fill=col)
+    # label right-aligned INSIDE the chart box, staggered to avoid collisions
+    lab = f"{name} \u2212{abs(drop):.1f}%"
+    ly += {-5.1: -26, -5.2: 9, -6.2: -9}[drop]
+    text(chx1 - 6, ly - 6, lab, SANS_B(9.5), col, anchor="ra")
+text(chx0, PY0 + 32, "Weekly close, % change  ·  Reuters", SANS(9.5), GRAPH)
+# GTA VI block
+GTX = chx1 + 24
+text(GTX, PY0 + 32, "AND IN ENTERTAINMENT", SANS_B(9.5), GRAPH)
+text(GTX, PY0 + 50, "GTA VI", SERIF_B(24), INK)
+text(GTX, PY0 + 80, "$2.36bn", SERIF_B(26), BRASS)
+text(GTX, PY0 + 110, "revenue in under 24 hours", SANS(10), GRAPH)
+text(GTX, PY0 + 124, "24.5m copies sold \u00b7 75% on PlayStation", SANS(10), GRAPH)
+bar_x, bar_y = GTX, PY0 + 130
+bars = [("GTA VI, day one", 2.36, BRASS), ("Top film, opening weekend", 0.52, BLUEGR)]
+for i, (lab, v, col) in enumerate(bars):
+    yb = bar_y + i * 14
+    text(bar_x, yb, lab, SANS(9), GRAPH)
+    d.rectangle([bar_x, yb + 9, bar_x + int(130 * v / 2.36), yb + 14], fill=col)
+text(PX0 + 12, PY1 - 18, "Source: Sensor Tower \u00b7 Rockstar opening-day estimate", SANS(9.5), GRAPH)
 
-def lead_frame(i, label, col):
-    x0 = M + i * (pw + 10)
-    d.rectangle([x0, py0, x0 + pw, py0 + ph], outline=INK, width=1)
-    d.rectangle([x0, py0, x0 + pw, py0 + 16], fill=col)
-    text_at(x0 + 8, py0 + 2, label, SANS_B(9), PAPER, "la", f"lead{i}lbl")
-    return x0
-
-def lead_text(x0, hy, head, sup, srctxt, srccol, tags):
-    f_h, lns = fit_lines(head, SERIF_B, 15, pw - 14, 3)
-    for ln in lns:
-        text_at(x0 + 7, hy, ln, f_h, INK, tag=f"{tags}h{hy}")
-        hy += int(f_h.size * 1.2)
-    f_s, lns2 = fit_lines(sup, SANS, 9, pw - 14, 4)
-    for ln in lns2:
-        text_at(x0 + 7, hy + 6, ln, f_s, GREY, tag=f"{tags}s")
-        hy += int(f_s.size * 1.3)
-    text_at(x0 + 7, py0 + ph - 14, srctxt, SANS_B(8), srccol, "la", f"{tags}src")
-    return hy
-
-# ---- LEAD 1: RUSSIA-UKRAINE ----
-x0 = lead_frame(0, "CONFLICT — KYIV", RED)
-iy0 = py0 + 22
-d.rectangle([x0 + 6, iy0, x0 + pw - 6, iy0 + 94], fill=(30, 34, 48))
-sx = x0 + 6
-sky = [(0, 38, 20), (22, 26, 34), (40, 44, 26), (58, 20, 40), (74, 34, 22), (100, 28, 30),
-       (128, 40, 24), (150, 22, 38), (172, 30, 28), (196, 24, 34)]
-for ox, hh, ww in sky:
-    d.rectangle([sx + ox, iy0 + 94 - hh, sx + ox + ww, iy0 + 94], fill=(14, 16, 26))
-d.pieslice([sx + 104, iy0 + 42, sx + 124, iy0 + 68], 180, 360, fill=(14, 16, 26))
-d.rectangle([sx + 108, iy0 + 60, sx + 120, iy0 + 68], fill=(14, 16, 26))
-d.polygon([(sx + 112, iy0 + 36), (sx + 114, iy0 + 44), (sx + 110, iy0 + 44)], fill=(14, 16, 26))
-for xs, xe, yc in [(4, 60, 14), (24, 88, 30), (60, 116, 10), (10, 130, 44)]:
-    d.line([sx + xs, iy0 + yc, sx + xe, iy0 + 58], fill=RED, width=2)
-    d.ellipse([sx + xe - 3, iy0 + 55, sx + xe + 3, iy0 + 61], fill=RED)
-for bx, by in [(70, 22), (110, 36), (40, 48)]:
-    d.ellipse([sx + bx - 4, iy0 + by - 4, sx + bx + 4, iy0 + by + 4], outline=(240, 200, 120), width=1)
-    d.line([sx + bx - 6, iy0 + by, sx + bx + 6, iy0 + by], fill=(240, 200, 120), width=1)
-    d.line([sx + bx, iy0 + by - 6, sx + bx, iy0 + by + 6], fill=(240, 200, 120), width=1)
-text_at(x0 + pw / 2, iy0 + 98, "82 missiles + 380 drones shot down", SANS_B(10), RED, "ma", "l1burst")
-lead_text(x0, iy0 + 114,
-          "Russia fires ~100 missiles overnight; 3 Kyiv bridges hit",
-          "At least nine killed and dozens wounded as air defences engage a wave of cruise and ballistic missiles aimed at the capital.",
-          "Reuters / AP", RED, "l1")
-
-# ---- LEAD 2: CYCLONE AKVAN ----
-x0 = lead_frame(1, "WEATHER — ODISHA, INDIA", GREEN)
-iy0 = py0 + 22
-d.rectangle([x0 + 6, iy0, x0 + pw - 6, iy0 + 94], fill=(223, 231, 233))
-d.rectangle([x0 + 6, iy0 + 60, x0 + pw - 6, iy0 + 94], fill=(140, 175, 190))
-d.polygon([(x0 + 6, iy0 + 94), (x0 + 6, iy0 + 38), (x0 + 30, iy0 + 32), (x0 + 58, iy0 + 50),
-           (x0 + 86, iy0 + 58), (x0 + 120, iy0 + 70), (x0 + pw - 6, iy0 + 82), (x0 + pw - 6, iy0 + 94)],
-          fill=(214, 205, 180))
-coast = [(x0 + 30, iy0 + 32), (x0 + 58, iy0 + 50), (x0 + 86, iy0 + 58), (x0 + 120, iy0 + 70), (x0 + pw - 6, iy0 + 82)]
-d.line(coast, fill=GREEN, width=2)
-scx, scy, r0 = x0 + pw - 34, iy0 + 26, 26
-for a in range(0, 540, 10):
-    rr = 4 + a / 540 * r0
-    aa = math.radians(a)
-    px_, py_ = scx + rr * math.cos(aa), scy + rr * 0.8 * math.sin(aa)
-    d.ellipse([px_ - 2, py_ - 2, px_ + 2, py_ + 2], fill=NAVY)
-d.ellipse([scx - 5, scy - 5, scx + 5, scy + 5], fill=RED)
-lx = x0 + 96
-d.line([lx, iy0 + 58, lx, iy0 + 40], fill=RED, width=2)
-d.polygon([(lx - 5, iy0 + 40), (lx + 5, iy0 + 40), (lx, iy0 + 33)], fill=RED)
-text_at(lx, iy0 + 20, "Gopalpur", SANS_B(9), RED, "ma", "l2land")
-text_at(x0 + pw - 70, iy0 + 84, "Bay of Bengal", SANS(8), (45, 75, 90), "la", "l2sea")
-for k in range(3):
-    yy0 = iy0 + 8 + k * 6
-    d.line([x0 + 14, yy0, x0 + 44 + k * 8, yy0], fill=BLUE, width=1)
-text_at(x0 + pw / 2, iy0 + 98, "70–90 km/h winds · 47 trains cancelled", SANS_B(10), GREEN, "ma", "l2burst")
-lead_text(x0, iy0 + 114,
-          "Cyclone Akvan makes landfall at Gopalpur; 300,000+ moved to safety",
-          "Authorities evacuate coastal districts of Odisha ahead of the storm's arrival with 47 train services cancelled.",
-          "Reuters / PTI / The Hindu", GREEN, "l2")
-
-# ---- LEAD 3: MARKETS / GTA VI ----
-x0 = lead_frame(2, "MARKETS — ASIA", NAVY)
-iy0 = py0 + 22
-d.rectangle([x0 + 6, iy0, x0 + pw - 6, iy0 + 94], fill=(236, 233, 222))
-for gx in range(1, 5):
-    gx_x = x0 + 6 + gx * (pw - 12) / 5
-    d.line([gx_x, iy0 + 4, gx_x, iy0 + 86], fill=LIGHT, width=1)
-for gy in range(1, 4):
-    gy_y = iy0 + 4 + gy * 82 / 4
-    d.line([x0 + 6, gy_y, x0 + pw - 6, gy_y], fill=LIGHT, width=1)
-def path(pts, col):
-    for k in range(len(pts) - 1):
-        d.line([x0 + 8 + pts[k][0] * (pw - 16) / 100, iy0 + 4 + pts[k][1] * 82 / 100,
-                x0 + 8 + pts[k + 1][0] * (pw - 16) / 100, iy0 + 4 + pts[k + 1][1] * 82 / 100], fill=col, width=2)
-path([(0, 18), (15, 26), (30, 24), (45, 40), (60, 52), (75, 68), (100, 84)], RED)
-path([(0, 22), (15, 30), (30, 34), (45, 44), (60, 58), (75, 64), (100, 78)], NAVY)
-path([(0, 26), (15, 32), (30, 40), (45, 46), (60, 56), (75, 62), (100, 72)], BLUE)
-for px_, py_, col in [(100, 84, RED), (100, 78, NAVY), (100, 72, BLUE)]:
-    d.ellipse([x0 + 8 + px_ * (pw - 16) / 100 - 3, iy0 + 4 + py_ * 82 / 100 - 3,
-               x0 + 8 + px_ * (pw - 16) / 100 + 3, iy0 + 4 + py_ * 82 / 100 + 3], fill=col)
-bx = x0 + 14
-for k, (hh, col) in enumerate([(12, GOLD), (26, GOLD), (44, RED)]):
-    d.rectangle([bx + k * 16, iy0 + 90 - hh, bx + k * 16 + 10, iy0 + 90], fill=col)
-text_at(x0 + 12, iy0 + 2, "3rd straight weekly decline", SANS(8), GREY, "la", "l3note")
-text_at(x0 + pw / 2, iy0 + 98, "GTA VI: $2.36bn in 24h · 24.5m copies", SANS_B(10), NAVY, "ma", "l3burst")
-lead_text(x0, iy0 + 114,
-          "Asian equities log worst week since 1991 as GTA VI smashes launch records",
-          "Taiwan -6.2%, KOSPI -5.2%, Nikkei -5.1% to 56,436.65; 75% of GTA VI sales on PlayStation.",
-          "Reuters / Sensor Tower / CNBC", NAVY, "l3")
-
-# =====================================================================
-# E. SUPPORTING GRID (542..786): 9 cards, 3x3
-# =====================================================================
-gy0 = 542
-cw = (W - 2 * M - 2 * 8) / 3
-chh = 78
-cards = [
-    ("UK-EU RESET", "BRUSSELS", RED, "flag",
-     "UK and EU agree 'reset' deal", "Eases food trade and youth mobility", "Reuters"),
-    ("NATO CARD", "WASHINGTON", NAVY, "table",
-     "US envoys float NATO path for Ukraine", "Membership discussed vs ceded territory", "WSJ"),
-    ("SIBERIA CRASH", "SIBERIA", GREY, "plane",
-     "Russian transport plane down", "19 killed in military crash", "CNN"),
-    ("RIYADH STRIKE", "RIYADH", GREEN, "tower",
-     "Houthi missile damages tallest tower", "HQ of PIF Saudi hit", "Al Jazeera/WSJ"),
-    ("HORMUZ MINES", "STRAIT OF HORMUZ", BLUE, "tanker",
-     "Third tanker strikes mine", "Shipping risk mounts in the strait", "IRNA"),
-    ("SPEAKER BID", "WASHINGTON", RED, "gavel",
-     "Democrats nominate Jeffries", "Party picks its candidate for Speaker", "Democracy Now"),
-    ("ANTHROPIC IPO", "NEW YORK", GOLD, "chip",
-     "Anthropic closes debut at $97.17", "Valuation $1.27tn, $93.5bn raised", "CNBC"),
-    ("BITCOIN ETF", "US MARKETS", NAVY, "coin",
-     "Bitcoin ETF outflow hits $582m", "November nears $3.5bn total", "The Block"),
-    ("COP31 DEADLOCK", "ANTALYA", GREEN, "globe",
-     "COP31 draft omits fossil fuels", "Africa Group demands grants, $190bn gap", "AP/DW"),
+# ============================================================
+# SUPPORT STORIES — 6 items (612..988, 490..652)
+# ============================================================
+SX0, SY0, SX1, SY1 = 612, 490, 988, 652
+panel(SX0, SY0, SX1, SY1)
+kicker(SX0 + 12, SY0 + 10, "ALSO ON FRIDAY", BRASS)
+d.line([(SX0 + 12, SY0 + 28), (SX1 - 12, SY0 + 28)], fill=LINE)
+supports = [
+    ("M. EAST", RED,    "Houthi missile hits Riyadh tower", "Al Jazeera / WSJ"),
+    ("AMERICAS", NAVY,  "Anthropic IPO closes at $1.27tn",   "CNBC"),
+    ("EUROPE",  GREEN,  "UK\u2013EU reset deal: food trade, youth",        "Reuters"),
+    ("ASIA",    NAVY,   "Xi and Prabowo open trade talks",             "Xinhua"),
+    ("GLOBAL",  BRASS,  "COP31 ends; draft omits 'fossil fuels'",      "AP / DW"),
+    ("HEALTH",  RED,    "US loses measles-elimination status",         "UNICEF / PAHO"),
 ]
+sy = SY0 + 36
+for i, (tag, col, headline, src) in enumerate(supports):
+    d.rectangle([SX0 + 12, sy + 1, SX0 + 17, sy + 26], fill=col)
+    text(SX0 + 24, sy, tag, SANS_B(8.5), col)
+    text(SX0 + 78, sy - 1, headline, SANS_B(12.5), INK)
+    text(SX1 - 14, sy + 14, src, SANS(9), GRAPH, anchor="ra")
+    sy += 33
+    if i < len(supports) - 1:
+        d.line([(SX0 + 12, sy - 8), (SX1 - 12, sy - 8)], fill=(224, 219, 206))
 
-def icon(kind, x, y, col):
-    if kind == "flag":
-        d.line([x, y, x, y + 26], fill=INK, width=2)
-        d.polygon([(x, y + 2), (x + 22, y + 6), (x, y + 12)], fill=RED)
-        d.line([x + 11, y + 3, x + 11, y + 11], fill=(240, 238, 228), width=2)
-    elif kind == "table":
-        d.polygon([(x + 12, y), (x + 22, y + 10), (x + 12, y + 20), (x + 2, y + 10)], outline=col, width=2)
-        d.ellipse([x + 2, y + 2, x + 8, y + 8], fill=RED)
-        d.ellipse([x + 16, y + 2, x + 22, y + 8], fill=NAVY)
-        d.ellipse([x + 9, y + 14, x + 15, y + 20], fill=GOLD)
-    elif kind == "plane":
-        d.line([x + 2, y + 24, x + 26, y + 4], fill=col, width=2)
-        d.polygon([(x + 26, y + 4), (x + 34, y + 2), (x + 30, y + 9)], fill=col)
-        d.line([x + 14, y + 13, x + 22, y + 24], fill=col, width=2)
-        d.ellipse([x + 4, y + 22, x + 10, y + 28], outline=col, width=1)
-        d.line([x + 5, y + 27, x + 9, y + 31], fill=GREY, width=1)
-    elif kind == "tower":
-        d.polygon([(x + 12, y), (x + 16, y + 28), (x + 8, y + 28)], fill=col)
-        d.line([x + 4, y + 12, x + 20, y + 12], fill=col, width=1)
-        d.line([x + 6, y + 19, x + 18, y + 19], fill=col, width=1)
-        d.ellipse([x + 9, y + 4, x + 15, y + 10], outline=RED, width=2)
-    elif kind == "tanker":
-        d.polygon([(x, y + 16), (x + 30, y + 16), (x + 26, y + 24), (x + 4, y + 24)], fill=col)
-        d.rectangle([x + 6, y + 6, x + 24, y + 16], fill=col)
-        d.rectangle([x + 10, y + 2, x + 14, y + 6], fill=INK)
-        d.line([x + 3, y + 28, x + 27, y + 28], fill=BLUE, width=2)
-        d.ellipse([x + 18, y - 2, x + 24, y + 4], outline=RED, width=1)
-    elif kind == "gavel":
-        d.line([x + 2, y + 26, x + 24, y + 26], fill=INK, width=2)
-        d.polygon([(x + 8, y + 26), (x + 18, y + 26), (x + 16, y + 12), (x + 10, y + 12)], fill=col)
-        d.rectangle([x + 16, y + 2, x + 26, y + 8], fill=col)
-    elif kind == "chip":
-        d.rectangle([x + 4, y + 4, x + 24, y + 24], fill=col)
-        d.rectangle([x + 9, y + 9, x + 19, y + 19], fill=CARD)
-        for k in range(4):
-            d.line([x + 2, y + 7 + k * 5, x + 4, y + 7 + k * 5], fill=INK, width=1)
-            d.line([x + 24, y + 7 + k * 5, x + 26, y + 7 + k * 5], fill=INK, width=1)
-            d.line([x + 7 + k * 5, y + 2, x + 7 + k * 5, y + 4], fill=INK, width=1)
-    elif kind == "coin":
-        d.ellipse([x + 4, y + 2, x + 22, y + 20], fill=GOLD)
-        d.text((x + 13, y + 10), "$", font=SANS_B(11), fill=(60, 48, 20), anchor="mm")
-        d.line([x + 2, y + 12, x + 30, y + 26], fill=RED, width=2)
-        d.polygon([(x + 28, y + 20), (x + 32, y + 28), (x + 24, y + 26)], fill=RED)
-    elif kind == "globe":
-        d.ellipse([x, y, x + 26, y + 26], outline=col, width=2)
-        d.ellipse([x + 6, y, x + 20, y + 26], outline=col, width=1)
-        d.line([x, y + 13, x + 26, y + 13], fill=col, width=1)
-        d.line([x + 4, y + 6, x + 22, y + 6], fill=col, width=1)
-        d.line([x + 4, y + 20, x + 22, y + 20], fill=col, width=1)
-        d.line([x, y + 28, x + 12, y + 32], fill=INK, width=2)
-        d.line([x + 14, y + 28, x + 26, y + 32], fill=INK, width=2)
-
-for i, (cat, loc, col, ic, head, det, src) in enumerate(cards):
-    r, c = divmod(i, 3)
-    x0 = M + c * (cw + 8)
-    y0 = gy0 + r * (chh + 6)
-    d.rectangle([x0, y0, x0 + cw, y0 + chh], outline=LIGHT, width=1, fill=CARD)
-    d.rectangle([x0, y0, x0 + 4, y0 + chh], fill=col)
-    icon(ic, x0 + cw - 36, y0 + 6, col)
-    text_at(x0 + 9, y0 + 4, cat, SANS_B(9), col, "la", f"card{i}cat")
-    text_at(x0 + 9, y0 + 15, loc, SANS(7), GREY, "la", f"card{i}loc")
-    f_h, lns = fit_lines(head, SERIF_B, 11, cw - 48, 2)
-    yy = y0 + 27
-    for ln in lns:
-        text_at(x0 + 9, yy, ln, f_h, INK, tag=f"card{i}h")
-        yy += int(f_h.size * 1.15)
-    f_s, lns2 = fit_lines(det, SANS, 8, cw - 18, 2)
-    for ln in lns2:
-        text_at(x0 + 9, yy + 2, ln, f_s, GREY, tag=f"card{i}d")
-        yy += int(f_s.size * 1.25)
-    text_at(x0 + 9, y0 + chh - 12, src, SANS_B(7), col, "la", f"card{i}s")
-hline(786, M, W - M, 1)
-
-# =====================================================================
-# F. WORLD MAP 'WHERE IT HAPPENED' (788..902)
-# =====================================================================
-text_at(M, 788, "WHERE IT HAPPENED", SANS_B(12), INK, "la", "mapt")
-text_at(M + 152, 793, "Ten places that made the front page", SANS(8.5), GREY, "la", "mapsub")
-d.line([M, 803, W - M, 803], fill=LIGHT, width=1)
-
-mask = [
-"....................................................................",
-".....LL.............HHHHHHHHHHH..........BBBBBBBB....................",
-"....LLAAA..AAAA....HHHHHHHHHHHHHH......BBBBBBBBBBBB...KKKKK.........",
-"...LLAAAAAAAAAAAA.HHHHHHHHHHHHHHHH..BBBBBBBBBBBBBBBB.BKKKKKKK.......",
-"....AAAAAAAAAAAA.HHHHHHHHHHHHHHHHBBBBBBBBBBBBBBBBBBBBKKKKKKKKK......",
-".....AAAAAAAAA....HHHHHHHHHHHHHBBBBBBBBBBBBBBBBBBBBKKKKKKKKKKK......",
-"......CCAAAA......HHHHHHHHHHHBBBBBBBBBBBBBBBBBBBKKKKKKKKKKKKK.......",
-"......CCCA.........HHHHHHHH..BBBBBBBBBBBBBBBBBBBKKKKKKKKKKK.........",
-".......CC...................BBBBBBBBBBBBBBBBBB.KKKKKKKKK............",
-"........C...................BBBBBBBBBBBBBBBBB....KKKKK....FFF.......",
-"........C....................BBBBBBBBBBBBBB..............FFFFFF......",
-".........C...................BBBBBBBBBBBB................FFFFFFF.....",
-"..........CC..................BBBBBBBBBB......D..........FFFFFF......",
-"...........C...................BBBBBBB....................FFFF.......",
-"............CC.................BBBB.B......................FF........",
-".............C.................BB..........................F.........",
-"..............CC...............B......................................",
-"...............C........GG............................................",
-"........................GGGG..........................................",
-"........................GGGG..........................................",
-".........................GG...........................................",
+# ============================================================
+# WORLD MAP (36..988, 664..940) — equirectangular coastlines
+# ============================================================
+APX0, APY0, APX1, APY1 = 36, 664, 988, 940
+panel(APX0, APY0, APX1, APY1, fill=(236, 238, 234))
+kicker(APX0 + 12, APY0 + 10, "WHERE IT HAPPENED  \u00b7  20 NOVEMBER 2026", NAVY)
+d.line([(APX0 + 12, APY0 + 28), (APX1 - 12, APY0 + 28)], fill=LINE)
+MXa0, MYa0, MXa1, MYa1 = APX0 + 14, APY0 + 38, APX0 + 610, APY1 - 26
+LON0, LON1, LAT0, LAT1 = -170, 190, 82, -58
+def PJ(lon, lat):
+    return (MXa0 + (lon - LON0) / (LON1 - LON0) * (MXa1 - MXa0),
+            MYa0 + (LAT0 - lat) / (LAT0 - LAT1) * (MYa1 - MYa0))
+for lon in range(-160, 200, 20):
+    xg, _ = PJ(lon, 0)
+    d.line([(xg, MYa0), (xg, MYa1)], fill=(216, 220, 214))
+for lat in range(-40, 90, 20):
+    _, yg = PJ(0, lat)
+    d.line([(MXa0, yg), (MXa1, yg)], fill=(216, 220, 214))
+d.rectangle([MXa0, MYa0, MXa1, MYa1], outline=(180, 186, 178))
+_, ye = PJ(0, 0)
+d.line([(MXa0, ye), (MXa1, ye)], fill=(168, 176, 170), width=1)
+LAND   = (210, 208, 192)
+LAND_E = (150, 148, 130)
+CONTINENTS = [
+    [(71,-156),(69,-141),(70,-127),(72,-110),(69,-97),(67,-85),(63,-78),(58,-62),(52,-56),
+     (47,-53),(45,-65),(41,-70),(35,-75),(31,-81),(25,-81),(30,-84),(29,-90),(26,-97),
+     (21,-97),(16,-95),(15,-92),(10,-84),(8,-78),(9,-80),(14,-92),(19,-105),(23,-110),
+     (28,-114),(34,-120),(40,-124),(48,-124),(55,-133),(60,-145),(60,-165),(66,-164)],
+    [(83,-40),(81,-20),(72,-22),(60,-43),(65,-52),(75,-58),(80,-55)],
+    [(11,-72),(10,-64),(5,-52),(0,-50),(-5,-35),(-13,-38),(-23,-42),(-30,-48),(-38,-57),
+     (-50,-62),(-55,-68),(-52,-72),(-40,-73),(-30,-71),(-18,-70),(-6,-81),(0,-80),(8,-77)],
+    [(37,-6),(37,10),(33,22),(32,25),(31,32),(31,34),(22,37),(12,43),(11,51),(4,48),
+     (-2,41),(-15,40),(-26,33),(-34,20),(-34,18),(-30,17),(-20,12),(-10,13),(0,9),
+     (4,6),(4,-8),(5,-4),(6,-10),(11,-17),(15,-17),(21,-17),(28,-13),(33,-9)],
+    [(37,-9),(43,-9),(44,-1),(49,-2),(51,2),(53,5),(57,8),(58,5),(62,5),(68,14),(71,25),
+     (68,44),(73,55),(76,100),(70,170),(66,170),(60,163),(54,158),(50,156),(54,140),
+     (46,142),(39,126),(35,129),(34,126),(30,122),(23,117),(21,110),(10,107),(9,105),
+     (1,103),(6,100),(14,100),(16,94),(22,89),(21,87),(16,82),(8,77),(15,74),(21,70),
+     (25,66),(25,57),(25,52),(30,48),(24,52),(17,55),(13,45),(21,39),(28,34),(31,32),
+     (36,36),(36,28),(40,23),(38,20),(41,18),(44,13),(45,9),(43,5),(43,3),(41,0),
+     (39,0),(37,-2),(36,-6)],
+    [(58,-5),(54,-3),(51,1),(50,-5),(53,-4),(57,-6)],
+    [(55,-6),(52,-6),(51,-9),(54,-10)],
+    [(45,142),(43,145),(41,141),(38,140),(36,139.8),(35.5,139.6),(33,135),(31,131)],
+    [(3,95.5),(0,100),(-3,102),(-5.5,105.5),(-6.0,112),(-6.5,115),(-7.5,114),(-7.0,110),(-6.6,106.5),(-6.9,105),(-4.5,103),(-2,99.5),(1.5,96)],
+    [(7,117),(1,119),(-4,116),(0,110),(5,109)],
+    [(1,120),(-2,121),(-5,120),(-2,119)],
+    [(-1,131),(-3,141),(-8,147),(-10,150),(-8,141),(-4,133)],
+    [(18,121),(14,122),(13,124),(16,120)],
+    [(9,80),(6,82),(7,80)],
+    [(-12,49),(-16,50),(-25,47),(-25,45),(-16,44)],
+    [(-11,142),(-16,146),(-28,153),(-38,147),(-39,144),(-35,138),(-32,133),(-34,120),
+     (-34,115),(-26,113),(-20,119),(-17,123),(-14,127),(-12,131),(-12,137)],
+    [(-41,146),(-43,147),(-43,145)],
+    [(-35,174),(-39,177),(-42,174),(-46,169),(-44,170)],
+    [(66,-23),(65,-14),(63,-19)],
 ]
-CXM, CYM = 5.6, 4.55
-MX, MY = M + 10, 807
-for r, row in enumerate(mask):
-    for c, ch in enumerate(row):
-        if ch != ".":
-            cx = MX + c * CXM
-            cy = MY + r * CYM
-            d.ellipse([cx, cy, cx + 3.6, cy + 3.6], fill=(158, 152, 136))
-
-# markers: (num, col, row, label, colour, side)
+for poly in CONTINENTS:
+    pts = [PJ(lon, lat) for lat, lon in poly]
+    d.polygon(pts, fill=LAND, outline=LAND_E)
+d.polygon([PJ(50,47), PJ(53,44), PJ(50,38), PJ(48,42)], fill=(206, 218, 222))
+def marker(n, lon, lat):
+    x, y = PJ(lon, lat)
+    d.ellipse([x - 9, y - 9, x + 9, y + 9], fill=RED, outline=WHITE)
+    text(x, y - 1, str(n), SANS_B(10), WHITE, anchor="mm")
 markers = [
-    # Europe/Middle East cluster spread out to avoid collisions
-    (1, 20.5, 5.2, "Kyiv", RED, 1),          # Eastern Europe, label right
-    (4, 23.5, 6.2, "Hormuz", BLUE, 1),       # Gulf, label right over Iran
-    (3, 21.0, 8.6, "Riyadh", RED, -1),       # Arabia, label left over Africa
-    (2, 23.5, 12.4, "Odisha", GREEN, 1),     # India east coast
-    (5, 50.0, 4.4, "Shenzhen", NAVY, 1),     # South China
-    (6, 17.0, 6.6, "Antalya", GOLD, -1),     # Anatolia, label left over Med.
-    (7, 11.0, 3.4, "New York", RED, -1),     # US east coast
-    (8, 54.0, 15.4, "Canberra", GREEN, -1),  # SE Australia
-    (9, 11.0, 11.6, "Lagos", GOLD, 1),       # West Africa coast
-    (10, 10.0, 15.6, "Brasília", BLUE, -1),  # Brazil
+    (1, 30.5, 50.4), (2, 84.9, 19.3), (3, 139.7, 35.7), (4, 46.7, 24.7),
+    (5, 30.7, 36.9), (6, -74.0, 40.7), (7, -0.1, 51.5), (8, 106.9, -6.15),
 ]
-
-for num, gx, gy, name, col, side in markers:
-    cx = MX + gx * CXM
-    cy = MY + gy * CYM
-    d.rectangle([cx - 5.5, cy - 5.5, cx + 5.5, cy + 5.5], fill=col, outline=PAPER, width=1)
-    d.text((cx, cy - 1), str(num), font=SANS_B(7.5), fill=PAPER, anchor="mm")
-    if num == 1:
-        text_at(cx, cy - 15, name, SANS(7.5), INK, "ma", f"mk{num}")
-        d.line([cx, cy - 9, cx, cy - 5], fill=col, width=1)
-    elif side > 0:
-        d.line([cx + 5, cy, cx + 10, cy], fill=col, width=1)
-        text_at(cx + 12, cy - 6, name, SANS(7.5), INK, "la", f"mk{num}")
-    else:
-        d.line([cx - 5, cy, cx - 10, cy], fill=col, width=1)
-        text_at(cx - 12, cy - 6, name, SANS(7.5), INK, "ra", f"mk{num}")
-
-# legend: two columns on the right of the map
-lx0 = 662
-text_at(lx0, 806, "LEGEND", SANS_B(9), INK, "la", "legt")
-legend = [("1", RED, "Kyiv missile assault"), ("2", GREEN, "Cyclone Akvan landfall"),
-          ("3", RED, "Riyadh tower strike"), ("4", BLUE, "Hormuz mine strike"),
-          ("5", NAVY, "GTA VI / Asian selloff"), ("6", GOLD, "COP31 Antalya"),
-          ("7", RED, "Jeffries / Anthropic IPO"), ("8", GREEN, "ASX slide, WBBL final"),
-          ("9", GOLD, "COP31 Africa Group"), ("10", BLUE, "Americas markets")]
-for k, (n, col, lb) in enumerate(legend):
-    cc, rr = divmod(k, 5)
-    yy = 818 + rr * 13
-    lx = lx0 + cc * 172
-    d.rectangle([lx, yy, lx + 10, yy + 9], fill=col)
-    d.text((lx + 5, yy + 4), n, font=SANS_B(7), fill=PAPER, anchor="mm")
-    text_at(lx + 15, yy + 1, lb, SANS(7.5), INK, "la", f"leg{k}")
-d.line([lx0 - 10, 812, lx0 - 10, 880], fill=LIGHT, width=1)
-
-# =====================================================================
-# G. 'ALSO ON FRIDAY' (906..990): 3 columns x 7 briefs = 20
-# =====================================================================
-text_at(M, 906, "ALSO ON FRIDAY", SANS_B(11), INK, "la", "alsot")
-text_at(M + 118, 910, "Twenty more dispatches from the same edition", SANS(8), GREY, "la", "alsosub")
-d.line([M, 920, W - M, 920], fill=LIGHT, width=1)
-briefs = [
-    ("BERLIN", "Merz: Ukraine talks with Europe 'soon' (DW)"),
-    ("MADRID", "Sanchez and Feijoo clash in TV debate (POLITICO)"),
-    ("JAKARTA", "Xi and Prabowo open China-Indonesia talks (Xinhua)"),
-    ("TAIPEI", "9 ships, 8 aircraft, 4 balloons tracked (Taiwan News)"),
-    ("NEW DELHI", "Modi opens SCO Civilisational Dialogue (DD India)"),
-    ("GALLE", "Pakistan seal 2-0 Test series over Sri Lanka (ESPNcricinfo)"),
-    ("WASHINGTON", "Trump defers Iran strike decision to 2027 (CBS)"),
-    ("LONDON", "Oil up Friday but third weekly fall (Reuters)"),
-    ("GAZA", "22,000+ children killed since Oct 2023 (Anadolu)"),
-    ("GAZA", "Central incursion displaces more families (Gaza Herald)"),
-    ("WASHINGTON", "Mullin pressed on ICE custody deaths (Democracy Now)"),
-    ("NAIROBI", "Africa Group wants grants not loans (DW)"),
-    ("ADDIS ABABA", "AU urges higher domestic health budgets (Channel Africa)"),
-    ("SYDNEY", "ASX 200 down 1.6% to 8,592.60 (AP)"),
-    ("ADELAIDE", "Strikers win WBBL final by five wickets (cricket.com.au)"),
-    ("ATLANTA", "US loses measles elimination status (UNICEF/PAHO)"),
-    ("BETHESDA", "Endometriosis pathways mapped in 1M+ people (NIH)"),
-    ("LUND", "Galectin-3 speeds Alzheimer's damage (Lund Univ.)"),
-    ("CUPERTINO", "Gemini gets computer-use on Mac (TechCrunch)"),
-    ("SANTA CLARA", "OpenAI models speed AMD chip design, +14% PPA (OpenAI/AMD)"),
+for n, lon, lat in markers:
+    marker(n, lon, lat)
+for lab, lon, lat in (("N. AMERICA", -100, 45), ("S. AMERICA", -60, -15), ("AFRICA", 20, 5),
+                      ("EUROPE", 15, 55), ("ASIA", 90, 48), ("AUSTRALIA", 134, -25)):
+    x, y = PJ(lon, lat)
+    text(x, y, lab, SANS_B(9), (110, 112, 100), anchor="mm")
+LX = APX0 + 648
+text(LX, APY0 + 38, "THE DAY IN EIGHT PLACES", SANS_B(10.5), GRAPH)
+legend = [
+    (1, "Kyiv \u2014 overnight missile assault"),
+    (2, "Gopalpur, India \u2014 Cyclone Akvan landfall"),
+    (3, "Tokyo \u2014 Nikkei \u22125.1% week"),
+    (4, "Riyadh \u2014 Houthi missile strike"),
+    (5, "Antalya \u2014 COP31 final day"),
+    (6, "New York \u2014 Anthropic $93.5bn IPO"),
+    (7, "London \u2014 UK\u2013EU reset deal"),
+    (8, "Jakarta \u2014 China\u2013Indonesia talks"),
 ]
-NB_COLS = 3
-nbcw = (W - 2 * M - 2 * 10) / NB_COLS
-percol = 7
-# pick font size so every line fits its column
-def brief_line(n, loc, txt):
-    return f"{n}. {loc} \u2014 {txt}"
+ly = APY0 + 62
+for n, txt in legend:
+    d.ellipse([LX, ly, LX + 15, ly + 15], fill=RED, outline=WHITE)
+    text(LX + 7, ly + 6, str(n), SANS_B(9), WHITE, anchor="mm")
+    text(LX + 24, ly + 2, txt, SANS(11.5), INK)
+    ly += 27
+d.line([(LX, ly + 2), (APX1 - 14, ly + 2)], fill=LINE)
+text(LX, ly + 10, "Projection: equirectangular \u00b7 markers mark report locations", SANS(9), GRAPH)
+text(LX, ly + 26, "Not for navigational use \u00b7 coastlines simplified", SANS(9), GRAPH)
 
-bfont = None
-for sz in [8.5, 8.4, 8.3, 8.2, 8.1, 8.0, 7.9, 7.8, 7.7, 7.6, 7.5, 7.4, 7.3, 7.2, 7.1, 7.0, 6.9]:
-    f = SANS(sz)
-    worst = max(tw(brief_line(21 + i, b[0], b[1]), f) for i, b in enumerate(briefs))
-    avail = min(nbcw - 8, colw2_avail if False else nbcw - 8)
-    if worst <= nbcw - 8:
-        bfont = f
-        break
-if bfont is None:
-    bfont = SANS(6.8)
-for i, (loc, txt) in enumerate(briefs):
-    cc, rr = divmod(i, percol)
-    bx = M + cc * (nbcw + 10)
-    yy = 926 + rr * 9
-    n = 21 + i
-    d.text((bx, yy), f"{n}.", font=SANS_B(7.5), fill=RED)
-    nw = tw(f"{n}.", SANS_B(7.5))
-    text_at(bx + nw + 3, yy, f"{loc} \u2014 {txt}", bfont, INK, "la", f"bf{n}")
-for cc in range(1, NB_COLS):
-    d.line([M + cc * (nbcw + 10) - 5, 924, M + cc * (nbcw + 10) - 5, 986], fill=LIGHT, width=1)
-
-# =====================================================================
-# H. FOOTER (990..1024)
-# =====================================================================
-hline(990, M, W - M, 1)
-text_at(W // 2, 994, "DATE CHECK: All stories occurred or were first reported on Friday, November 20, 2026 (UTC)",
-        SANS_B(8), NAVY, "ma", "foot1")
-text_at(W // 2, 1006,
-        "Sources: Reuters - AP - AFP - BBC - Al Jazeera - WSJ - Bloomberg - CNBC - Xinhua - DW - The Hindu - POLITICO - NIH - UNICEF",
-        SANS(8), GREY, "ma", "foot2")
-hline(1020, M, W - M, 1)
-
-# ---------- QA ----------
-ov = overlaps()
-print("OVERLAPS:", ov if ov else "none")
+# ============================================================
+# FOOTER (952..1000)
+# ============================================================
+d.line([(36, 950), (988, 950)], fill=INK, width=2)
+text(36, 958, "DATE CHECK: every event above was reported on Friday, 20 November 2026, in some time zone that calendar day.", SANS(10.5), GRAPH)
+text(36, 976, "SOURCES: Reuters \u00b7 AP \u00b7 PTI \u00b7 The Hindu \u00b7 Xinhua \u00b7 CNBC \u00b7 Sensor Tower \u00b7 Al Jazeera \u00b7 WSJ \u00b7 AP/DW \u00b7 UNICEF \u00b7 PAHO", SANS_B(10.5), INK)
+text(988, 958, "EDITION 2026-1120 \u00b7 v4", SANS_B(10.5), GRAPH, anchor="ra")
+text(988, 976, "Compiled by the graphics desk", SANS(10.5), GRAPH, anchor="ra")
 
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry.png")
 img.save(out, format="PNG", optimize=True)

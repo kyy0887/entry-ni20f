@@ -7,8 +7,8 @@ import { join } from "node:path";
 
 const DEFAULT_OUT = "/output";
 const EDITION = "2026-1120";
-const ITEMS = 32;
-const REGIONS = 7;
+const ITEMS = 18;
+const VERSION = "v4";
 
 async function main() {
   const outDir = process.env.MAKEFUN_OUTPUT_DIR || DEFAULT_OUT;
@@ -23,13 +23,13 @@ async function main() {
     dimensions: { width: 1024, height: 1024 },
     edition: EDITION,
     items: ITEMS,
-    regions: REGIONS,
+    version: VERSION,
   };
   writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
   const bytes = statSync(src).size;
   console.log(`[entry] entry.png (${bytes} bytes) + manifest.json -> ${outDir}`);
-  console.log(`[entry] items: ${ITEMS}, regions: ${REGIONS}, edition: ${EDITION}`);
+  console.log(`[entry] items: ${ITEMS}, edition: ${EDITION}, version: ${VERSION}`);
 }
 
 main().catch((err) => {
